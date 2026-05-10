@@ -1,0 +1,73 @@
+{
+  "correlations": {
+    "NTPC": 0.0116,
+    "Tata Power": 0.024,
+    "Adani Power": 0.0846,
+    "Reliance": 0.0517,
+    "Power Grid": 0.0127
+  },
+  "regression": {
+    "NTPC": {
+      "slope": 0.022,
+      "r_squared": 0.0077
+    },
+    "Tata Power": {
+      "slope": 0.0208,
+      "r_squared": 0.0031
+    },
+    "Adani Power": {
+      "slope": 0.0457,
+      "r_squared": 0.0061
+    },
+    "Reliance": {
+      "slope": 0.0307,
+      "r_squared": 0.0101
+    },
+    "Power Grid": {
+      "slope": 0.0305,
+      "r_squared": 0.0146
+    }
+  },
+  "heat_sensitivity": {
+    "NTPC": -0.1257,
+    "Tata Power": 0.0776,
+    "Adani Power": 0.4008,
+    "Reliance": 0.3663,
+    "Power Grid": -0.0578
+  },
+  "tipping_point": 31,
+  "temp_volatility": [
+    [
+      30,
+      1.9233
+    ],
+    [
+      31,
+      1.9895
+    ],
+    [
+      32,
+      2.0371
+    ],
+    [
+      33,
+      2.0651
+    ],
+    [
+      34,
+      2.0608
+    ],
+    [
+      35,
+      2.0295
+    ],
+    [
+      36,
+      1.7837
+    ],
+    [
+      37,
+      1.584
+    ]
+  ]
+}

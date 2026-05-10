@@ -117,14 +117,24 @@ def compute_analysis(df):
 
     correlations = {}
     for col in stock_cols:
-        corr, pvalue = stats.pearsonr(df["avg_temp"], df[f"{col}_return"])
-        correlations[col] = round(corr, 4)
+        try:
+            clean = df[["avg_temp", f"{col}_return"]].dropna()
+            if len(clean) < 2:
+                correlations[col] = 0.0
+                continue
+            corr, pvalue = stats.pearsonr(clean["avg_temp"], clean[f"{col}_return"])
+            correlations[col] = round(corr, 4)
+        except:
+            correlations[col] = 0.0
 
     heat_sensitivity = {}
     for col in stock_cols:
-        heat = df[df["heat_shock"]][f"{col}_return"].mean()
-        normal = df[~df["heat_shock"]][f"{col}_return"].mean()
-        heat_sensitivity[col] = round(heat - normal, 4)
+        try:
+            heat = df[df["heat_shock"]][f"{col}_return"].mean()
+            normal = df[~df["heat_shock"]][f"{col}_return"].mean()
+            heat_sensitivity[col] = round(heat - normal, 4)
+        except:
+            heat_sensitivity[col] = 0.0
 
     temp_ranges = range(30, 46)
     avg_volatility = []
@@ -134,7 +144,7 @@ def compute_analysis(df):
             vol = subset[[f"{col}_volatility" for col in stock_cols]].mean().mean()
             avg_volatility.append((temp, round(vol, 4)))
 
-    tipping_point = None
+    tipping_point = 35
     max_jump = 0
     for i in range(1, len(avg_volatility)):
         jump = avg_volatility[i][1] - avg_volatility[i-1][1]

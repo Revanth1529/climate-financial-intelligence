@@ -3,12 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-import yfinance as yf
-import openmeteo_requests
-import requests_cache
-from retry_requests import retry
-from datetime import datetime, timedelta
-import json
+from datetime import datetime
 
 # ============ PAGE CONFIG ============
 st.set_page_config(
@@ -17,85 +12,21 @@ st.set_page_config(
     layout="wide"
 )
 
-# ============ LIVE DATA FETCHING ============
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+# ============ LOAD DATA FROM CSV ============
+@st.cache_data(ttl=3600)
 def fetch_live_data():
-    end_date = datetime.today().strftime('%Y-%m-%d')
-    start_date = "2020-01-01"
+    stock_df = pd.read_csv("stock_data.csv", index_col=0, parse_dates=True)
+    temp_df = pd.read_csv("temperature_data.csv", index_col=0, parse_dates=True)
 
-    # ---- STOCK DATA ----
-    stocks = {
-        "NTPC": "NTPC.NS",
-        "Tata Power": "TATAPOWER.NS",
-        "Adani Power": "ADANIPOWER.NS",
-        "Reliance": "RELIANCE.NS",
-        "Power Grid": "POWERGRID.NS"
-    }
+    if isinstance(stock_df.columns, pd.MultiIndex):
+        stock_df.columns = stock_df.columns.get_level_values(0)
 
-    all_stocks = []
-    for name, ticker in stocks.items():
-        df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
-        df = df[['Close']].copy()
-        df.columns = [name]
-        all_stocks.append(df)
-
-    stock_df = pd.concat(all_stocks, axis=1)
-    stock_df.index = pd.to_datetime(stock_df.index)
-
-    # ---- TEMPERATURE DATA ----
-    cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    openmeteo = openmeteo_requests.Client(session=retry_session)
-
-    cities = {
-        "Delhi": (28.6139, 77.2090),
-        "Mumbai": (19.0760, 72.8777),
-        "Chennai": (13.0827, 80.2707),
-        "Kolkata": (22.5726, 88.3639),
-        "Hyderabad": (17.3850, 78.4867)
-    }
-
-    all_temps = []
-    for city, (lat, lon) in cities.items():
-        url = "https://archive-api.open-meteo.com/v1/archive"
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "start_date": start_date,
-            "end_date": (datetime.today() - timedelta(days=5)).strftime('%Y-%m-%d'),
-            "daily": "temperature_2m_max",
-            "timezone": "Asia/Kolkata"
-        }
-
-        responses = openmeteo.weather_api(url, params=params)
-        response = responses[0]
-        daily = response.Daily()
-        temp_max = daily.Variables(0).ValuesAsNumpy()
-
-        dates = pd.date_range(
-            start=pd.Timestamp(daily.Time(), unit="s", tz="Asia/Kolkata"),
-            end=pd.Timestamp(daily.TimeEnd(), unit="s", tz="Asia/Kolkata"),
-            freq=pd.Timedelta(seconds=daily.Interval()),
-            inclusive="left"
-        )
-
-        temp_df = pd.DataFrame({"Date": dates, city: temp_max})
-        temp_df.set_index("Date", inplace=True)
-        all_temps.append(temp_df)
-
-    temp_final = pd.concat(all_temps, axis=1)
-    temp_final.index = temp_final.index.tz_localize(None)
-
-    # ---- MERGE ----
     stock_df.index = stock_df.index.tz_localize(None)
-    merged = pd.merge(stock_df, temp_final, left_index=True, right_index=True, how='inner')
+    temp_df.index = temp_df.index.tz_localize(None)
 
-    if isinstance(merged.columns, pd.MultiIndex):
-        merged.columns = merged.columns.get_level_values(0)
-
+    merged = pd.merge(stock_df, temp_df, left_index=True, right_index=True, how='inner')
     merged = merged.dropna()
 
-    # ---- COMPUTE FEATURES ----
     city_cols = ["Delhi", "Mumbai", "Chennai", "Kolkata", "Hyderabad"]
     merged["avg_temp"] = merged[city_cols].mean(axis=1)
     merged["CDD"] = merged["avg_temp"].apply(lambda x: max(0, x - 18))
@@ -107,7 +38,6 @@ def fetch_live_data():
         merged[f"{col}_volatility"] = merged[f"{col}_return"].rolling(7).std()
 
     merged = merged.dropna()
-
     return merged
 
 # ============ COMPUTE ANALYSIS ============
@@ -157,7 +87,7 @@ def compute_analysis(df):
 # ============ LOAD DATA ============
 stock_cols = ["NTPC", "Tata Power", "Adani Power", "Reliance", "Power Grid"]
 
-with st.spinner("🔄 Fetching live data..."):
+with st.spinner("🔄 Loading data..."):
     df = fetch_live_data()
 
 correlations, heat_sensitivity, tipping_point = compute_analysis(df)
@@ -165,11 +95,8 @@ correlations, heat_sensitivity, tipping_point = compute_analysis(df)
 # ============ SIDEBAR ============
 st.sidebar.title("🌡️ Climate-Financial Intelligence")
 st.sidebar.markdown("---")
-
-# Last updated
 st.sidebar.success(f"✅ Last Updated: {datetime.now().strftime('%d %b %Y %H:%M')}")
 
-# Refresh button
 if st.sidebar.button("🔄 Refresh Data"):
     st.cache_data.clear()
     st.rerun()
@@ -201,7 +128,6 @@ if page == "🏠 Overview":
 
     st.markdown("---")
 
-    # Heat Sensitivity Index
     st.subheader("🔥 Heat Sensitivity Index")
     sens_df = pd.DataFrame({
         "Stock": list(heat_sensitivity.keys()),
@@ -225,7 +151,6 @@ if page == "🏠 Overview":
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Correlation table
     st.subheader("📊 Temperature vs Stock Return Correlation")
     corr_df = pd.DataFrame({
         "Stock": list(correlations.keys()),
@@ -236,18 +161,16 @@ if page == "🏠 Overview":
     )
     st.dataframe(corr_df, use_container_width=True)
 
-    # Live stock prices
-    st.subheader("💹 Live Stock Prices")
+    st.subheader("💹 Latest Stock Prices")
     cols = st.columns(5)
     for i, stock in enumerate(stock_cols):
-        current = df[stock].iloc[-1]
-        previous = df[stock].iloc[-2]
-        change = ((current - previous) / previous) * 100
-        cols[i].metric(
-            stock,
-            f"₹{current:.2f}",
-            f"{change:+.2f}%"
-        )
+        try:
+            current = df[stock].iloc[-1]
+            previous = df[stock].iloc[-2]
+            change = ((current - previous) / previous) * 100
+            cols[i].metric(stock, f"₹{current:.2f}", f"{change:+.2f}%")
+        except:
+            cols[i].metric(stock, "N/A", "N/A")
 
 # ============ PAGE 2 — STOCK VS TEMPERATURE ============
 elif page == "📈 Stock vs Temperature":
